@@ -45,8 +45,8 @@ private:
 
   ros::NodeHandle ph_, nh_;
 
-  int linear_, angular_, deadman_axis_;
-  double l_scale_, a_scale_;
+  int linear_, angular_, deadman_axis_, arrow_vertical_idx_, arrow_horizontal_idx_, slow_idx;
+  double l_scale_, a_scale_, slow_scale_, slow_prev_;
   ros::Publisher vel_pub_;
   ros::Subscriber joy_sub_;
 
@@ -62,9 +62,15 @@ TurtlebotTeleop::TurtlebotTeleop():
   ph_("~"),
   linear_(1),
   angular_(0),
+  arrow_vertical_idx_(7),
+  arrow_horizontal_idx_(6),
+  slow_idx(5),
   deadman_axis_(4),
   l_scale_(0.3),
-  a_scale_(0.9)
+  a_scale_(0.9),
+  slow_scale_(1.0),
+  slow_prev_(0)
+
 {
   ph_.param("axis_linear", linear_, linear_);
   ph_.param("axis_angular", angular_, angular_);
@@ -84,8 +90,22 @@ TurtlebotTeleop::TurtlebotTeleop():
 void TurtlebotTeleop::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
 { 
   geometry_msgs::Twist vel;
-  vel.angular.z = a_scale_*joy->axes[angular_];
-  vel.linear.x = l_scale_*joy->axes[linear_];
+
+  if(joy->axes[slow_idx] != slow_prev_){
+    slow_prev_ = joy->axes[slow_idx];
+    double slow_scale = ((1.0 + slow_prev_ )/2.0);
+    slow_scale_ = 1 - (slow_scale < 1.0 )*0.5 - (slow_scale <= 0.0)*0.3;
+  }
+
+  if(joy->axes[arrow_horizontal_idx_] != 0.0 || joy->axes[arrow_vertical_idx_] != 0.0){
+    vel.angular.z = a_scale_*joy->axes[arrow_horizontal_idx_]*slow_scale_;
+    vel.linear.x = l_scale_*joy->axes[arrow_vertical_idx_]*slow_scale_;
+  }
+  else{
+    vel.angular.z = a_scale_*joy->axes[angular_]*slow_scale_;
+    vel.linear.x = l_scale_*joy->axes[linear_]*slow_scale_;
+  }
+
   last_published_ = vel;
   deadman_pressed_ = joy->buttons[deadman_axis_];
 }
